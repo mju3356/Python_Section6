@@ -7,7 +7,7 @@ import datetime
 import re
 from lib.You_Viewer_Layout import Ui_MainWindow
 from lib.AuthDialog import AuthDialog
-
+import pytube
 
 #Form_Class=uic.loadUiType('c:/PythonApp/Section6/ui/You_Viewer_V1.0.ui')[0]
 
@@ -21,10 +21,15 @@ class Main(QMainWindow,Ui_MainWindow):
         #시그널 초기화
         self.initSignal()
         #로그인 관련 변수 선언
-        self.user_id='1234'
-        self.user_pw='4567'
+        self.user_id=None
+        self.user_pw=None
         #재생 여부 확인
         self.is_play=False
+        #Youtube 관련 작업
+        self.youtb=None
+        self.youtb_fsize=0
+
+
 
 
     #기본 UI 비활성화
@@ -58,13 +63,14 @@ class Main(QMainWindow,Ui_MainWindow):
         self.webEngineView.loadProgress.connect(self.showProgressBrowerLoding)
         self.fileNavButton.clicked.connect(self.selectDownPath)
         self.calendarWidget.clicked.connect(self.appendDate)
+        self.startButton.clicked.connect(self.downloadYoutube)
 
     @pyqtSlot()
     def authCheck(self):
-        #dlg=AuthDialog()
-        #dlg.exec_()
-        #self.user_id=dlg.user_id
-        #self.user_pw=dlg.user_pw
+        dlg=AuthDialog()
+        dlg.exec_()
+        self.user_id=dlg.user_id
+        self.user_pw=dlg.user_pw
         if True:
             self.intiAuthActive()
             self.loginButton.setText('인증완료')
@@ -96,13 +102,37 @@ class Main(QMainWindow,Ui_MainWindow):
                 self.previewButton.setText('중지')
                 self.is_play=True
                 self.startButton.setEnabled(True)
+                self.initalYouWork(url)
             else:
                 QMessageBox.about(self,'URL 형식오류','Youtube 주소 형식이 아닙니다.')
                 self.urlTextEdit.clear()
                 self.urlTextEdit.setFocus(True)
+
+    def initalYouWork(self,url):
+        video_list=pytube.YouTube(url)
+        #로딩바 계산
+        video_list.register_on_progress_callback(self.showProgressDownLoding)
+        self.youtb=video_list.streams.all()
+        self.streamCombobox.clear()
+        for q in self.youtb:
+            #print(q.itag,q.resolution)
+            tmp_list,str_list=[],[]
+            tmp_list.append(str(q.mime_type or ''))
+            tmp_list.append(str(q.resolution or ''))
+            tmp_list.append(str(q.fps or ''))
+            tmp_list.append(str(q.abr or ''))
+            str_list=[x for x in tmp_list if x !=''] #공백제거 제네레이터
+            #print('step3',str_list)
+
+            self.streamCombobox.addItem(','.join(str_list)) #조인함수 기본함수
+
     @pyqtSlot(int)
     def showProgressBrowerLoding(self,v):
         self.progressBar.setValue(v)
+
+    def showProgressDownLoding(self,stream,chunk,bytes_remaining):
+        self.progressBar_2.setValue(int(((self.youtb_fsize-bytes_remaining)/self.youtb_fsize)*100))
+
 
     @pyqtSlot()
     def selectDownPath(self):
@@ -119,6 +149,21 @@ class Main(QMainWindow,Ui_MainWindow):
         #년월일print('click date',self.calendarWidget.selectedDate().toString())
         #print(str(cur_date.year())+'-'+str(cur_date.month())+'-'+str(cur_date.day()))
         self.append_log_msg('Calendar Click')
+
+    @pyqtSlot()
+    def downloadYoutube(self):
+        down_dir=self.pathTextEdit.text().strip()
+        if down_dir is None or down_dir=='' or not down_dir:
+            QMessageBox.about(self,'경로선택','다운로드 받을 경로를 선택하세요')
+            self.pathTextEdit.setFocus(True)
+            return
+
+        self.youtb_fsize=self.youtb[self.streamCombobox.currentIndex()].filesize #파일 사이즈 리턴
+        print(self.youtb_fsize)
+
+        self.youtb[self.streamCombobox.currentIndex()].download(down_dir)
+        self.append_log_msg('Download Click')
+
 
 
 
